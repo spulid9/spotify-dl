@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import time
-import shutil
+
 import threading
 import urllib.request
 import subprocess
@@ -25,6 +25,7 @@ from flask_cors import CORS
 # ── Config ──────────────────────────────────────────────────────────────
 
 from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, REDIRECT_URI
+
 SCOPE = "user-library-read"
 
 # ── App data directories ────────────────────────────────────────────────
@@ -35,7 +36,7 @@ else:
     APP_DATA = Path.home() / ".config" / "spotify-downloader"
 
 CACHE_FILE = APP_DATA / "download_cache.json"
-CONFIG_FILE = APP_DATA / "config.json"
+
 DOWNLOAD_DIR = Path.home() / "Downloads" / "spotify-music"
 MAX_CONCURRENT = 3
 MAX_SONGS = 200
@@ -59,8 +60,6 @@ download_job = {
     "status": "idle",  # idle | scanning | ready | downloading | done | error
 }
 
-sp_oauth = None
-
 
 def ensure_dirs():
     APP_DATA.mkdir(parents=True, exist_ok=True)
@@ -80,16 +79,7 @@ def save_cache(cache):
     CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
 
 
-def get_spotify():
-    """Return an authenticated spotipy client (in-memory auth, nothing persisted)."""
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-        redirect_uri=REDIRECT_URI,
-        scope=SCOPE,
-        cache_handler=MemoryCacheHandler(),
-        open_browser=True,
-    ))
+
 
 
 # ── Download logic ──────────────────────────────────────────────────────
@@ -97,11 +87,11 @@ def get_spotify():
 def download_song(track, cache, semaphore):
     """Download a single track: yt-dlp → ffmpeg tag → cache update."""
     track_id = track["id"]
-    artist = track["artists"][0]["name"]
+    artist = track["artist"]
     title = track["name"]
-    album = track["album"]["name"]
+    album = track["album"]
     track_num = track.get("track_number", 1)
-    cover_url = track["album"]["images"][0]["url"] if track["album"].get("images") else None
+    cover_url = track.get("album_art")
 
     safe_artist = "".join(c for c in artist if c.isalnum() or c in " ._-'").strip()
     safe_title = "".join(c for c in title if c.isalnum() or c in " ._-'").strip()
@@ -270,8 +260,14 @@ def exchange():
         return jsonify({"error": "Missing code"}), 400
 
     try:
-        sp = get_spotify()
-        # Force auth with the provided code
+        sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=REDIRECT_URI,
+            scope=SCOPE,
+            cache_handler=MemoryCacheHandler(),
+            open_browser=False,
+        ))
         sp.auth_manager.get_access_token(code)
 
         # Fetch liked songs (up to MAX_SONGS)
