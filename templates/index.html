@@ -95,6 +95,30 @@
     <button class="btn btn-green" id="scan-btn" onclick="scan()">🔍 Scan Library</button>
   </div>
 
+  <!-- Library Section -->
+  <div id="library-section" class="card hidden">
+    <h2 style="margin-bottom:12px;">🎧 Your Liked Songs</h2>
+    <p style="color:#888;margin-bottom:16px;">Pick which songs to download. Your whole library is here — search to narrow it down.</p>
+
+    <input type="text" id="search-input" placeholder="🔍 Search artist or song..." style="width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#252525;color:#e0e0e0;font-size:14px;margin-bottom:12px;" oninput="renderLibrary()">
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-gray" onclick="selectAllVisible()">☑️ Select All</button>
+      <button class="btn btn-gray" onclick="selectNone()">⬜ Clear</button>
+      <button class="btn btn-gray" onclick="selectNewOnly()">🆕 Only Not Downloaded</button>
+      <span style="margin-left:auto;color:#888;font-size:13px;align-self:center;"><span id="sel-count" style="color:#1db954;font-weight:700;">0</span> selected</span>
+    </div>
+
+    <div class="track-list" id="track-list" style="max-height:400px;"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-green" id="download-selected-btn" onclick="downloadSelected()">📥 Download Selected</button>
+    </div>
+    <div id="orphan-note" class="hidden" style="margin-top:10px;color:#f39c12;font-size:13px;">
+      🗑️ <span id="orphan-count-text">0</span> orphaned file(s) (no longer liked). <button class="btn btn-red" style="padding:4px 12px;font-size:12px;" onclick="cleanupOrphans()">Remove</button>
+    </div>
+  </div>
+
   <!-- Results Section -->
   <div id="results-section" class="card hidden">
     <h2 style="margin-bottom:16px;">Step 3: Review &amp; Download</h2>
@@ -183,7 +207,9 @@
 <script>
 let authCode = null;
 let tracks = [];
+let selected = new Set();
 let scanData = null;
+let orphanedTracks = [];
 let pollInterval = null;
 
 // Check for auth code in URL
@@ -228,8 +254,11 @@ async function exchangeCode(code) {
 
     if (data.tracks) {
       tracks = data.tracks;
+      orphanedTracks = data.orphaned || [];
+      selected.clear();
+      tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
       document.getElementById('login-status').textContent = `✅ Found ${data.count} liked songs!`;
-      document.getElementById('scan-section').classList.remove('hidden');
+      showLibrary();
     } else {
       document.getElementById('login-status').textContent = '❌ Error: ' + (data.error || 'Unknown error');
       document.getElementById('login-section').classList.remove('hidden');
@@ -238,6 +267,113 @@ async function exchangeCode(code) {
     document.getElementById('login-status').textContent = '❌ Network error';
     document.getElementById('login-section').classList.remove('hidden');
   }
+}
+
+function showLibrary() {
+  document.getElementById('login-section').classList.add('hidden');
+  document.getElementById('scan-section').classList.add('hidden');
+  document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('library-section').classList.remove('hidden');
+  document.getElementById('search-input').value = '';
+  renderLibrary();
+  updateOrphanNote();
+}
+
+function updateOrphanNote() {
+  const note = document.getElementById('orphan-note');
+  if (orphanedTracks.length > 0) {
+    document.getElementById('orphan-count-text').textContent = orphanedTracks.length;
+    note.classList.remove('hidden');
+  } else {
+    note.classList.add('hidden');
+  }
+}
+
+function renderLibrary() {
+  const query = (document.getElementById('search-input').value || '').toLowerCase();
+  const listEl = document.getElementById('track-list');
+  listEl.innerHTML = '';
+
+  let visible = 0;
+  tracks.forEach(t => {
+    const haystack = (t.name + ' ' + t.artist + ' ' + t.album).toLowerCase();
+    if (query && !haystack.includes(query)) return;
+    visible++;
+
+    const row = document.createElement('label');
+    row.className = 'track-item';
+    row.style.cssText = 'cursor:pointer;align-items:center;gap:10px;';
+    row.innerHTML = `
+      <input type="checkbox" ${selected.has(t.id) ? 'checked' : ''} ${t.downloaded ? 'disabled' : ''} style="accent-color:#1db954;transform:scale(1.2);" onchange="toggleSelect('${t.id}', this.checked)">
+      <div style="flex:1;min-width:0;">
+        <div class="track-title">${esc(t.name)}</div>
+        <div class="track-artist">${esc(t.artist)} — ${esc(t.album)}</div>
+      </div>
+      ${t.downloaded ? '<span style="color:#1db954;font-size:11px;white-space:nowrap;">✅ Downloaded</span>' : ''}
+    `;
+    listEl.appendChild(row);
+  });
+
+  if (visible === 0) {
+    listEl.innerHTML = '<div style="color:#888;text-align:center;padding:20px;font-size:13px;">No songs match your search.</div>';
+  }
+  updateSelCount();
+}
+
+function toggleSelect(id, checked) {
+  if (checked) selected.add(id); else selected.delete(id);
+  updateSelCount();
+}
+
+function selectAllVisible() {
+  const query = (document.getElementById('search-input').value || '').toLowerCase();
+  tracks.forEach(t => {
+    if (t.downloaded) return;
+    const haystack = (t.name + ' ' + t.artist + ' ' + t.album).toLowerCase();
+    if (query && !haystack.includes(query)) return;
+    selected.add(t.id);
+  });
+  renderLibrary();
+}
+
+function selectNone() {
+  selected.clear();
+  renderLibrary();
+}
+
+function selectNewOnly() {
+  selected.clear();
+  tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
+  renderLibrary();
+}
+
+function updateSelCount() {
+  document.getElementById('sel-count').textContent = selected.size;
+  document.getElementById('download-selected-btn').disabled = selected.size === 0;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function downloadSelected() {
+  if (selected.size === 0) return;
+  startDownload(Array.from(selected));
+}
+
+async function refreshLibrary() {
+  try {
+    const resp = await fetch('/api/library');
+    const data = await resp.json();
+    if (data.tracks) {
+      tracks = data.tracks;
+      orphanedTracks = data.orphaned || [];
+      selected.clear();
+      tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
+      renderLibrary();
+      updateOrphanNote();
+    }
+  } catch (e) { /* keep current view */ }
 }
 
 async function scan() {
@@ -284,6 +420,7 @@ async function downloadAll() {
 async function startDownload(trackIds) {
   document.getElementById('results-section').classList.add('hidden');
   document.getElementById('scan-section').classList.add('hidden');
+  document.getElementById('library-section').classList.add('hidden');
   document.getElementById('progress-section').classList.remove('hidden');
   document.getElementById('error-list').classList.add('hidden');
   document.getElementById('current-song-box').style.display = 'none';
@@ -342,6 +479,7 @@ async function pollProgress() {
     if (!data.running) {
       clearInterval(pollInterval);
       showDone(data);
+      refreshLibrary(); // update downloaded badges in background
     }
   } catch (e) {
     // ignore poll errors, keep trying
@@ -373,6 +511,7 @@ function startOver() {
   document.getElementById('login-section').classList.remove('hidden');
   authCode = null;
   tracks = [];
+  selected = new Set();
   scanData = null;
 }
 
@@ -383,11 +522,13 @@ async function cleanupOrphans() {
     const resp = await fetch('/api/cleanup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ track_ids: scanData.orphaned_tracks.map(t => t.track_id) }),
+      body: JSON.stringify({ track_ids: orphanedTracks.map(t => t.track_id) }),
     });
     const data = await resp.json();
     alert(`✅ Removed ${data.removed} orphaned file(s)`);
-    scan(); // re-scan
+    orphanedTracks = [];
+    updateOrphanNote();
+    refreshLibrary();
   } catch (e) {
     alert('Error: ' + e.message);
   }

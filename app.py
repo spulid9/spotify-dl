@@ -57,7 +57,9 @@ CACHE_FILE = APP_DATA / "download_cache.json"
 
 DOWNLOAD_DIR = Path.home() / "Downloads" / "spotify-music"
 MAX_CONCURRENT = 3
-MAX_SONGS = 200
+
+# Active Spotify client (set after OAuth exchange) — used for library fetching.
+sp_client = None
 
 # ── Flask app ───────────────────────────────────────────────────────────
 
@@ -283,7 +285,55 @@ def callback():
     code = request.args.get("code")
     if not code:
         return "Missing authorization code", 400
-    return redirect(f"http://localhost:5000/?auth_code={code}")
+    return redirect(f"http://127.0.0.1:5000/?auth_code={code}")
+
+
+def fetch_all_liked(sp):
+    """Fetch the user's ENTIRE liked-songs library (all pages), with download status."""
+    tracks = []
+    results = sp.current_user_saved_tracks(limit=50)
+    while results:
+        for item in results["items"]:
+            t = item["track"]
+            tracks.append({
+                "id": t["id"],
+                "name": t["name"],
+                "artist": t["artists"][0]["name"],
+                "album": t["album"]["name"],
+                "track_number": t.get("track_number", 1),
+                "album_art": t["album"]["images"][0]["url"] if t["album"].get("images") else None,
+            })
+        results = sp.next(results) if results and results.get("next") else None
+
+    # Mark which tracks are already downloaded
+    cache = load_cache()
+    for track in tracks:
+        track["downloaded"] = (
+            track["id"] in cache
+            and (DOWNLOAD_DIR / cache[track["id"]]["file"]).exists()
+        )
+    return tracks
+
+
+@app.route("/api/library")
+def library():
+    """Return the full liked-songs library with download status (re-scan without re-login)."""
+    if sp_client is None:
+        return jsonify({"error": "Not logged in"}), 401
+    try:
+        tracks = fetch_all_liked(sp_client)
+        download_job["tracks"] = tracks
+        cache = load_cache()
+        liked_ids = {t["id"] for t in tracks}
+        orphaned = []
+        for track_id, info in cache.items():
+            if track_id not in liked_ids:
+                file_path = DOWNLOAD_DIR / info["file"]
+                if file_path.exists():
+                    orphaned.append({"track_id": track_id, "file": info["file"], "song": info["song"], "artist": info["artist"]})
+        return jsonify({"tracks": tracks, "count": len(tracks), "orphaned": orphaned, "orphaned_count": len(orphaned)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/exchange", methods=["POST"])
@@ -295,7 +345,8 @@ def exchange():
         return jsonify({"error": "Missing code"}), 400
 
     try:
-        sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+        global sp_client
+        sp_client = spotipy.Spotify(auth_manager=SpotifyOAuth(
             client_id=SPOTIFY_CLIENT_ID,
             client_secret=SPOTIFY_CLIENT_SECRET,
             redirect_uri=REDIRECT_URI,
@@ -303,26 +354,9 @@ def exchange():
             cache_handler=MemoryCacheHandler(),
             open_browser=False,
         ))
-        sp.auth_manager.get_access_token(code)
+        sp_client.auth_manager.get_access_token(code)
 
-        # Fetch liked songs (up to MAX_SONGS)
-        results = sp.current_user_saved_tracks(limit=50)
-        tracks = []
-        while len(tracks) < MAX_SONGS and results:
-            for item in results["items"]:
-                t = item["track"]
-                tracks.append({
-                    "id": t["id"],
-                    "name": t["name"],
-                    "artist": t["artists"][0]["name"],
-                    "album": t["album"]["name"],
-                    "track_number": t.get("track_number", 1),
-                    "album_art": t["album"]["images"][0]["url"] if t["album"].get("images") else None,
-                })
-                if len(tracks) >= MAX_SONGS:
-                    break
-            results = sp.next(results) if results and results.get("next") else None
-
+        tracks = fetch_all_liked(sp_client)
         download_job["tracks"] = tracks
         return jsonify({"tracks": tracks, "count": len(tracks)})
 
