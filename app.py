@@ -29,6 +29,19 @@ from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, REDIRECT_URI
 
 SCOPE = "user-library-read"
 
+# ── PyInstaller binary paths ────────────────────────────────────────────
+
+def _resource_path(relative_path):
+    """Get absolute path to a bundled resource, works for dev and PyInstaller builds."""
+    try:
+        base = sys._MEIPASS
+    except AttributeError:
+        base = os.path.abspath(".")
+    return os.path.join(base, relative_path)
+
+YT_DLP_PATH = _resource_path("yt-dlp.exe")
+FFMPEG_PATH = _resource_path("ffmpeg.exe")
+
 # ── App data directories ────────────────────────────────────────────────
 
 if sys.platform == "win32":
@@ -125,7 +138,7 @@ def download_song(track, cache, semaphore):
             # Step 1: Download audio from YouTube via yt-dlp
             query = f"{artist} - {title} audio"
             yt_cmd = [
-                "yt-dlp",
+                YT_DLP_PATH,
                 "-x", "--audio-format", "mp3",
                 "--output", str(temp_path),
                 "--no-playlist",
@@ -149,7 +162,7 @@ def download_song(track, cache, semaphore):
 
             # Step 3: Tag and rename with ffmpeg
             ffmpeg_cmd = [
-                "ffmpeg", "-y",
+                FFMPEG_PATH, "-y",
                 "-i", str(temp_path),
                 "-metadata", f"title={title}",
                 "-metadata", f"artist={artist}",
