@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 from spotify_dl.config import Config
 
 
@@ -44,21 +45,25 @@ class TestConfig:
     def test_download_dir_default_is_home_downloads_spotify(self, monkeypatch):
         monkeypatch.setattr("spotify_dl.config.Path.home", lambda: __import__("pathlib").Path("/fake/home"))
         cfg = Config()
-        assert str(cfg.download_dir).endswith("Downloads/spotify-music")
+        assert cfg.download_dir.name == "spotify-music"
+        assert "Downloads" in str(cfg.download_dir)
 
     def test_cache_dir_default_is_config_spotify_downloader(self, monkeypatch):
         monkeypatch.setattr("spotify_dl.config.Path.home", lambda: __import__("pathlib").Path("/fake/home"))
         cfg = Config()
-        assert ".config/spotify-downloader" in str(cfg.cache_dir)
+        if sys.platform == "win32":
+            assert "SpotifyDownloader" in str(cfg.cache_dir)
+        else:
+            assert ".config/spotify-downloader" in str(cfg.cache_dir)
 
     def test_download_dir_custom(self, monkeypatch):
         monkeypatch.setattr("spotify_dl.config.Path.home", lambda: __import__("pathlib").Path("/fake/home"))
         cfg = Config(download_dir="/custom/downloads")
-        assert str(cfg.download_dir) == "/custom/downloads"
+        assert cfg.download_dir == Path("/custom/downloads")
 
     def test_cache_dir_custom(self):
         cfg = Config(cache_dir="/custom/cache")
-        assert str(cfg.cache_dir) == "/custom/cache"
+        assert cfg.cache_dir == Path("/custom/cache")
 
     def test_port_override(self):
         cfg = Config(port=8080)
