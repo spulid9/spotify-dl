@@ -23,6 +23,10 @@ from spotipy.cache_handler import MemoryCacheHandler
 from flask import Flask, jsonify, request, send_from_directory, redirect
 from flask_cors import CORS
 
+# Windows-only: suppress console windows when launching child processes (yt-dlp/ffmpeg).
+# 0 on other platforms so the flag is a no-op in dev on Linux/macOS.
+NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 # ── Config ──────────────────────────────────────────────────────────────
 
 from config import SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, REDIRECT_URI
@@ -150,7 +154,7 @@ def download_song(track, cache, semaphore):
                 "--extractor-args", "youtube:player_client=android,web_safari,ios",
                 f"ytsearch:{query}",
             ]
-            result = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=120, creationflags=NO_WINDOW_FLAG)
 
             # yt-dlp may name the file with the real extension (e.g. .webm/.m4a) if
             # conversion didn't produce .mp3 — find whatever it actually wrote.
@@ -185,7 +189,7 @@ def download_song(track, cache, semaphore):
             if cover_path and cover_path.exists():
                 ffmpeg_cmd.extend(["-map", "1:v", "-disposition:v", "attached_pic"])
             ffmpeg_cmd.append(str(output_path))
-            ffmpeg_result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
+            ffmpeg_result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60, creationflags=NO_WINDOW_FLAG)
 
             if ffmpeg_result.returncode != 0:
                 detail = (ffmpeg_result.stderr or "")[-300:] if ffmpeg_result.stderr else "no stderr"
