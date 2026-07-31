@@ -146,6 +146,8 @@ def download_song(track, cache, semaphore):
                 "--no-playlist",
                 "--quiet",
                 "--no-warnings",
+                "--retries", "5",
+                "--extractor-args", "youtube:player_client=android,web_safari,ios",
                 f"ytsearch:{query}",
             ]
             result = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=120)
@@ -168,18 +170,20 @@ def download_song(track, cache, semaphore):
                     cover_path = None
 
             # Step 3: Tag and rename with ffmpeg
-            ffmpeg_cmd = [
-                FFMPEG_PATH, "-y",
-                "-i", str(temp_path),
+            # Order matters: ALL inputs (-i) first, then output options, then output file.
+            ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", str(temp_path)]
+            if cover_path and cover_path.exists():
+                ffmpeg_cmd.extend(["-i", str(cover_path)])
+            ffmpeg_cmd.extend([
+                "-map", "0:a",
                 "-metadata", f"title={title}",
                 "-metadata", f"artist={artist}",
                 "-metadata", f"album={album}",
                 "-metadata", f"track={track_num}",
                 "-codec", "copy",
-            ]
+            ])
             if cover_path and cover_path.exists():
-                ffmpeg_cmd.extend(["-i", str(cover_path), "-map", "0:a", "-map", "1:v", "-disposition:v", "attached_pic"])
-
+                ffmpeg_cmd.extend(["-map", "1:v", "-disposition:v", "attached_pic"])
             ffmpeg_cmd.append(str(output_path))
             ffmpeg_result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
 
