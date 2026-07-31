@@ -137,9 +137,11 @@ def download_song(track, cache, semaphore):
         try:
             # Step 1: Download audio from YouTube via yt-dlp
             query = f"{artist} - {title} audio"
+            ffmpeg_dir = os.path.dirname(FFMPEG_PATH)
             yt_cmd = [
                 YT_DLP_PATH,
                 "-x", "--audio-format", "mp3",
+                "--ffmpeg-location", ffmpeg_dir,
                 "--output", str(temp_path),
                 "--no-playlist",
                 "--quiet",
@@ -148,8 +150,13 @@ def download_song(track, cache, semaphore):
             ]
             result = subprocess.run(yt_cmd, capture_output=True, text=True, timeout=120)
 
-            if result.returncode != 0 or not temp_path.exists():
-                return {"status": "failed", "track_id": track_id, "title": title, "artist": artist, "error": "yt-dlp failed"}
+            # yt-dlp may name the file with the real extension (e.g. .webm/.m4a) if
+            # conversion didn't produce .mp3 — find whatever it actually wrote.
+            matches = sorted(DOWNLOAD_DIR.glob(f"__temp_{track_id}.*"))
+            if result.returncode != 0 or not matches:
+                detail = (result.stderr or "")[-300:] if result.stderr else "no stderr"
+                return {"status": "failed", "track_id": track_id, "title": title, "artist": artist, "error": f"yt-dlp failed: {detail}"}
+            temp_path = matches[0]
 
             # Step 2: Download cover art
             cover_path = None
@@ -174,7 +181,13 @@ def download_song(track, cache, semaphore):
                 ffmpeg_cmd.extend(["-i", str(cover_path), "-map", "0:a", "-map", "1:v", "-disposition:v", "attached_pic"])
 
             ffmpeg_cmd.append(str(output_path))
-            subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
+            ffmpeg_result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
+
+            if ffmpeg_result.returncode != 0:
+                detail = (ffmpeg_result.stderr or "")[-300:] if ffmpeg_result.stderr else "no stderr"
+                if temp_path.exists():
+                    temp_path.unlink()
+                return {"status": "failed", "track_id": track_id, "title": title, "artist": artist, "error": f"ffmpeg failed: {detail}"}
 
             # Cleanup temp files
             if temp_path.exists():
