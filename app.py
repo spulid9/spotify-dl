@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+import webbrowser
 
 import threading
 import urllib.request
@@ -404,8 +405,10 @@ def progress():
 
 if __name__ == "__main__":
     ensure_dirs()
+    # Open browser after a short delay so the server is ready
+    threading.Timer(1.5, lambda: webbrowser.open("http://localhost:5000")).start()
     print("🎵 Spotify Downloader starting...")
     print(f"📁 Downloads go to: {DOWNLOAD_DIR}")
     print(f"🔧 Config stored in: {APP_DATA}")
-    print(f"🌐 Open http://localhost:5000 in your browser")
+    print(f"🌐 Opening http://localhost:5000 in your browser...")
     app.run(port=5000, debug=False, host="127.0.0.1")
