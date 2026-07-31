@@ -1,0 +1,76 @@
+# Build Spotify Downloader v2 executable for Windows
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install pyinstaller spotipy flask flask-cors requests pytest
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v
+
+      - name: Download yt-dlp
+        run: |
+          curl -L -o yt-dlp.exe https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe
+
+      - name: Download ffmpeg
+        shell: pwsh
+        run: |
+          curl -L -o ffmpeg-release.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          Expand-Archive ffmpeg-release.zip -DestinationPath ffmpeg-temp
+          Copy-Item ffmpeg-temp/ffmpeg-*/bin/ffmpeg.exe ffmpeg.exe
+          Remove-Item ffmpeg-release.zip
+          Remove-Item ffmpeg-temp -Recurse
+
+      - name: Embed Spotify credentials
+        run: |
+          (Get-Content config.py) -replace "YOUR_CLIENT_ID_HERE", "${{ secrets.SPOTIFY_CLIENT_ID }}" | Set-Content config.py
+          (Get-Content config.py) -replace "YOUR_CLIENT_SECRET_HERE", "${{ secrets.SPOTIFY_CLIENT_SECRET }}" | Set-Content config.py
+
+      - name: Build executable with PyInstaller
+        run: |
+          pyinstaller --onefile --name "SpotifyDownloader" `
+            --add-data "templates;templates" `
+            --add-binary "yt-dlp.exe;." `
+            --add-binary "ffmpeg.exe;." `
+            --add-data "spotify_dl;spotify_dl" `
+            --hidden-import flask_cors `
+            --hidden-import spotify_dl `
+            --hidden-import spotify_dl.config `
+            --hidden-import spotify_dl.cache `
+            --hidden-import spotify_dl.models `
+            --hidden-import spotify_dl.spotify `
+            --hidden-import spotify_dl.downloader `
+            --hidden-import spotify_dl.retry `
+            --hidden-import spotify_dl.tagger `
+            --hidden-import spotify_dl.job_state `
+            --noconsole `
+            app.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpotifyDownloader-Windows
+          path: dist/SpotifyDownloader.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: dist/SpotifyDownloader.exe
+          generate_release_notes: true

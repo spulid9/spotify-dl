@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify Downloader</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #121212; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; }
+  .header { background: #1db954; padding: 20px; text-align: center; }
+  .header h1 { color: #fff; font-size: 24px; font-weight: 700; }
+  .header p { color: #fff; opacity: 0.9; font-size: 14px; margin-top: 4px; }
+  .container { max-width: 800px; margin: 0 auto; padding: 20px; flex: 1; }
+
+  /* Card */
+  .card { background: #1e1e1e; border-radius: 12px; padding: 24px; margin-bottom: 16px; border: 1px solid #2a2a2a; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: none; border-radius: 24px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-green { background: #1db954; color: #fff; }
+  .btn-green:hover:not(:disabled) { background: #1ed760; }
+  .btn-red { background: #e74c3c; color: #fff; }
+  .btn-red:hover:not(:disabled) { background: #c0392b; }
+  .btn-gray { background: #333; color: #e0e0e0; }
+  .btn-gray:hover:not(:disabled) { background: #444; }
+  .btn-yellow { background: #f39c12; color: #fff; }
+  .btn-yellow:hover:not(:disabled) { background: #e67e22; }
+  .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* Status */
+  .status-box { background: #252525; border-radius: 8px; padding: 16px; margin-top: 16px; }
+  .status-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #333; }
+  .status-row:last-child { border-bottom: none; }
+  .status-label { color: #888; }
+  .status-value { color: #e0e0e0; font-weight: 500; }
+  .status-value.green { color: #1db954; }
+  .status-value.yellow { color: #f39c12; }
+  .status-value.red { color: #e74c3c; }
+
+  /* Progress bar */
+  .progress-bar { background: #333; border-radius: 8px; height: 8px; margin-top: 12px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #1db954; border-radius: 8px; transition: width 0.3s; width: 0%; }
+
+  /* Scan results */
+  .scan-result { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #252525; border-radius: 8px; margin-top: 8px; }
+  .scan-number { font-size: 28px; font-weight: 700; }
+  .scan-number.green { color: #1db954; }
+  .scan-number.yellow { color: #f39c12; }
+  .scan-number.red { color: #e74c3c; }
+
+  /* Track list */
+  .track-list { margin-top: 12px; max-height: 300px; overflow-y: auto; }
+  .track-item { padding: 8px 10px; border-bottom: 1px solid #2a2a2a; font-size: 13px; display: flex; justify-content: space-between; }
+  .track-item:last-child { border-bottom: none; }
+  .track-item .track-artist { color: #888; }
+  .track-item .track-title { color: #e0e0e0; }
+
+  /* Errors */
+  .error-list { margin-top: 12px; }
+  .error-item { background: #2d1a1a; border: 1px solid #442; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 13px; color: #e74c3c; }
+
+  /* Current song */
+  .current-song { background: #1a2d1a; border: 1px solid #1db95444; border-radius: 8px; padding: 12px; margin-top: 12px; text-align: center; font-size: 14px; }
+  .current-song .pulse { display: inline-block; width: 8px; height: 8px; background: #1db954; border-radius: 50%; margin-right: 8px; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Hidden */
+  .hidden { display: none !important; }
+
+  .footer { text-align: center; padding: 20px; color: #555; font-size: 12px; }
+  a { color: #1db954; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🎵 Spotify Downloader</h1>
+  <p>Download your liked songs with album art &amp; metadata</p>
+</div>
+
+<div class="container">
+  <!-- Login Section -->
+  <div id="login-section" class="card">
+    <h2 style="margin-bottom:12px;">Step 1: Log into Spotify</h2>
+    <p style="color:#888;margin-bottom:16px;">Click below to authorize. Your browser will open Spotify's login page.</p>
+    <button class="btn btn-green" id="login-btn" onclick="login()">🔗 Login with Spotify</button>
+    <p id="login-status" style="color:#888;margin-top:10px;font-size:13px;"></p>
+  </div>
+
+  <!-- Scan Section -->
+  <div id="scan-section" class="card hidden">
+    <h2 style="margin-bottom:12px;">Step 2: Check Your Library</h2>
+    <p style="color:#888;margin-bottom:16px;">We'll compare your liked songs against what's already downloaded.</p>
+    <button class="btn btn-green" id="scan-btn" onclick="scan()">🔍 Scan Library</button>
+  </div>
+
+  <!-- Library Section -->
+  <div id="library-section" class="card hidden">
+    <h2 style="margin-bottom:12px;">🎧 Your Liked Songs</h2>
+    <p style="color:#888;margin-bottom:16px;">Pick which songs to download. Your whole library is here — search to narrow it down.</p>
+
+    <input type="text" id="search-input" placeholder="🔍 Search artist or song..." style="width:100%;padding:12px;border-radius:8px;border:1px solid #333;background:#252525;color:#e0e0e0;font-size:14px;margin-bottom:12px;" oninput="renderLibrary()">
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-gray" onclick="selectAllVisible()">☑️ Select All</button>
+      <button class="btn btn-gray" onclick="selectNone()">⬜ Clear</button>
+      <button class="btn btn-gray" onclick="selectNewOnly()">🆕 Only Not Downloaded</button>
+      <span style="margin-left:auto;color:#888;font-size:13px;align-self:center;"><span id="sel-count" style="color:#1db954;font-weight:700;">0</span> selected</span>
+    </div>
+
+    <div class="track-list" id="track-list" style="max-height:400px;"></div>
+
+    <div class="btn-group">
+      <button class="btn btn-green" id="download-selected-btn" onclick="downloadSelected()">📥 Download Selected</button>
+    </div>
+    <div id="orphan-note" class="hidden" style="margin-top:10px;color:#f39c12;font-size:13px;">
+      🗑️ <span id="orphan-count-text">0</span> orphaned file(s) (no longer liked). <button class="btn btn-red" style="padding:4px 12px;font-size:12px;" onclick="cleanupOrphans()">Remove</button>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  <div id="results-section" class="card hidden">
+    <h2 style="margin-bottom:16px;">Step 3: Review &amp; Download</h2>
+
+    <div class="scan-result">
+      <span>📥 New songs to download</span>
+      <span class="scan-number green" id="new-count">0</span>
+    </div>
+    <div class="scan-result">
+      <span>✅ Already downloaded</span>
+      <span class="scan-number" id="already-count" style="color:#888;">0</span>
+    </div>
+    <div class="scan-result" id="orphaned-row" style="border:1px solid #c0392b44;">
+      <span>🗑️ Orphaned files (no longer liked)</span>
+      <span class="scan-number red" id="orphaned-count">0</span>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn btn-green" id="download-new-btn" onclick="downloadNew()">📥 Download New Songs</button>
+      <button class="btn btn-yellow" id="download-all-btn" onclick="downloadAll()">🔄 Download All 200</button>
+      <button class="btn btn-red hidden" id="cleanup-btn" onclick="cleanupOrphans()">🗑️ Remove Orphaned</button>
+    </div>
+  </div>
+
+  <!-- Progress Section -->
+  <div id="progress-section" class="card hidden">
+    <h2 style="margin-bottom:12px;">Downloading...</h2>
+
+    <div class="current-song" id="current-song-box" style="display:none;">
+      <span class="pulse"></span>
+      <span id="current-song-text">Preparing...</span>
+    </div>
+
+    <div class="status-box">
+      <div class="status-row">
+        <span class="status-label">Progress</span>
+        <span class="status-value" id="progress-text">0 / 0</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Skipped (already have)</span>
+        <span class="status-value green" id="skipped-text">0</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Failed</span>
+        <span class="status-value red" id="failed-text">0</span>
+      </div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="error-list hidden" id="error-list"></div>
+  </div>
+
+  <!-- Done Section -->
+  <div id="done-section" class="card hidden">
+    <h2 style="margin-bottom:12px;">✅ Download Complete!</h2>
+    <p style="color:#888;margin-bottom:8px;">Your songs are in <strong style="color:#e0e0e0;">Downloads/spotify-music/</strong></p>
+    <div class="status-box">
+      <div class="status-row">
+        <span class="status-label">Downloaded</span>
+        <span class="status-value green" id="done-downloaded">0</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Already had</span>
+        <span class="status-value" id="done-skipped" style="color:#888;">0</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Failed</span>
+        <span class="status-value red" id="done-failed">0</span>
+      </div>
+    </div>
+    <div id="done-errors" class="hidden error-list"></div>
+    <div class="btn-group">
+      <button class="btn btn-green" onclick="startOver()">🔄 Start Over</button>
+      <button class="btn btn-gray" onclick="window.close()">✖ Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Spotify Downloader &mdash; Personal use only. Respect copyright.
+</div>
+
+<script>
+let authCode = null;
+let tracks = [];
+let selected = new Set();
+let scanData = null;
+let orphanedTracks = [];
+let pollInterval = null;
+
+// Check for auth code in URL
+const params = new URLSearchParams(window.location.search);
+const code = params.get('auth_code');
+if (code) {
+  authCode = code;
+  // Clean URL
+  window.history.replaceState({}, document.title, '/');
+  // Auto-exchange
+  exchangeCode(code);
+}
+
+async function login() {
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Opening Spotify...';
+  document.getElementById('login-status').textContent = '';
+
+  try {
+    const resp = await fetch('/api/auth-url');
+    const data = await resp.json();
+    window.location.href = data.url;
+  } catch (e) {
+    document.getElementById('login-status').textContent = '❌ Error connecting to server. Make sure the app is running.';
+    btn.disabled = false;
+    btn.innerHTML = '🔗 Login with Spotify';
+  }
+}
+
+async function exchangeCode(code) {
+  document.getElementById('login-section').classList.add('hidden');
+  document.getElementById('login-status').textContent = '⏳ Logging in and fetching your liked songs...';
+
+  try {
+    const resp = await fetch('/api/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await resp.json();
+
+    if (data.tracks) {
+      tracks = data.tracks;
+      orphanedTracks = data.orphaned || [];
+      selected.clear();
+      tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
+      document.getElementById('login-status').textContent = `✅ Found ${data.count} liked songs!`;
+      showLibrary();
+    } else {
+      document.getElementById('login-status').textContent = '❌ Error: ' + (data.error || 'Unknown error');
+      document.getElementById('login-section').classList.remove('hidden');
+    }
+  } catch (e) {
+    document.getElementById('login-status').textContent = '❌ Network error';
+    document.getElementById('login-section').classList.remove('hidden');
+  }
+}
+
+function showLibrary() {
+  document.getElementById('login-section').classList.add('hidden');
+  document.getElementById('scan-section').classList.add('hidden');
+  document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('library-section').classList.remove('hidden');
+  document.getElementById('search-input').value = '';
+  renderLibrary();
+  updateOrphanNote();
+}
+
+function updateOrphanNote() {
+  const note = document.getElementById('orphan-note');
+  if (orphanedTracks.length > 0) {
+    document.getElementById('orphan-count-text').textContent = orphanedTracks.length;
+    note.classList.remove('hidden');
+  } else {
+    note.classList.add('hidden');
+  }
+}
+
+function renderLibrary() {
+  const query = (document.getElementById('search-input').value || '').toLowerCase();
+  const listEl = document.getElementById('track-list');
+  listEl.innerHTML = '';
+
+  let visible = 0;
+  tracks.forEach(t => {
+    const haystack = (t.name + ' ' + t.artist + ' ' + t.album).toLowerCase();
+    if (query && !haystack.includes(query)) return;
+    visible++;
+
+    const row = document.createElement('label');
+    row.className = 'track-item';
+    row.style.cssText = 'cursor:pointer;align-items:center;gap:10px;';
+    row.innerHTML = `
+      <input type="checkbox" ${selected.has(t.id) ? 'checked' : ''} ${t.downloaded ? 'disabled' : ''} style="accent-color:#1db954;transform:scale(1.2);" onchange="toggleSelect('${t.id}', this.checked)">
+      <div style="flex:1;min-width:0;">
+        <div class="track-title">${esc(t.name)}</div>
+        <div class="track-artist">${esc(t.artist)} — ${esc(t.album)}</div>
+      </div>
+      ${t.downloaded ? '<span style="color:#1db954;font-size:11px;white-space:nowrap;">✅ Downloaded</span>' : ''}
+    `;
+    listEl.appendChild(row);
+  });
+
+  if (visible === 0) {
+    listEl.innerHTML = '<div style="color:#888;text-align:center;padding:20px;font-size:13px;">No songs match your search.</div>';
+  }
+  updateSelCount();
+}
+
+function toggleSelect(id, checked) {
+  if (checked) selected.add(id); else selected.delete(id);
+  updateSelCount();
+}
+
+function selectAllVisible() {
+  const query = (document.getElementById('search-input').value || '').toLowerCase();
+  tracks.forEach(t => {
+    if (t.downloaded) return;
+    const haystack = (t.name + ' ' + t.artist + ' ' + t.album).toLowerCase();
+    if (query && !haystack.includes(query)) return;
+    selected.add(t.id);
+  });
+  renderLibrary();
+}
+
+function selectNone() {
+  selected.clear();
+  renderLibrary();
+}
+
+function selectNewOnly() {
+  selected.clear();
+  tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
+  renderLibrary();
+}
+
+function updateSelCount() {
+  document.getElementById('sel-count').textContent = selected.size;
+  document.getElementById('download-selected-btn').disabled = selected.size === 0;
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function downloadSelected() {
+  if (selected.size === 0) return;
+  startDownload(Array.from(selected));
+}
+
+async function refreshLibrary() {
+  try {
+    const resp = await fetch('/api/library');
+    const data = await resp.json();
+    if (data.tracks) {
+      tracks = data.tracks;
+      orphanedTracks = data.orphaned || [];
+      selected.clear();
+      tracks.forEach(t => { if (!t.downloaded) selected.add(t.id); });
+      renderLibrary();
+      updateOrphanNote();
+    }
+  } catch (e) { /* keep current view */ }
+}
+
+async function scan() {
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Scanning...';
+
+  try {
+    const resp = await fetch('/api/scan');
+    scanData = await resp.json();
+
+    document.getElementById('new-count').textContent = scanData.new_count;
+    document.getElementById('already-count').textContent = scanData.already_count;
+    document.getElementById('orphaned-count').textContent = scanData.orphaned_count;
+
+    document.getElementById('results-section').classList.remove('hidden');
+
+    if (scanData.orphaned_count > 0) {
+      document.getElementById('cleanup-btn').classList.remove('hidden');
+    }
+
+    if (scanData.new_count === 0) {
+      document.getElementById('download-new-btn').disabled = true;
+    }
+
+    btn.textContent = '🔍 Re-scan';
+    btn.disabled = false;
+  } catch (e) {
+    btn.textContent = '🔍 Scan Library';
+    btn.disabled = false;
+    alert('Error scanning: ' + e.message);
+  }
+}
+
+async function downloadNew() {
+  const newTracks = scanData.new_tracks.map(t => t.id);
+  startDownload(newTracks);
+}
+
+async function downloadAll() {
+  startDownload(null); // all tracks
+}
+
+async function startDownload(trackIds) {
+  document.getElementById('results-section').classList.add('hidden');
+  document.getElementById('scan-section').classList.add('hidden');
+  document.getElementById('library-section').classList.add('hidden');
+  document.getElementById('progress-section').classList.remove('hidden');
+  document.getElementById('error-list').classList.add('hidden');
+  document.getElementById('current-song-box').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+
+    // Start polling progress
+    pollInterval = setInterval(pollProgress, 1000);
+  } catch (e) {
+    alert('Error starting download: ' + e.message);
+  }
+}
+
+async function pollProgress() {
+  try {
+    const resp = await fetch('/api/progress');
+    const data = await resp.json();
+
+    const total = data.total || 1;
+    const done = data.completed + data.skipped;
+    const pct = Math.round((done / total) * 100);
+
+    document.getElementById('progress-text').textContent = `${data.completed + data.skipped + data.failed} / ${total}`;
+    document.getElementById('skipped-text').textContent = data.skipped;
+    document.getElementById('failed-text').textContent = data.failed;
+    document.getElementById('progress-fill').style.width = pct + '%';
+
+    if (data.current_song) {
+      document.getElementById('current-song-box').style.display = 'block';
+      document.getElementById('current-song-text').textContent = data.current_song;
+    }
+
+    if (data.errors && data.errors.length > 0) {
+      const errList = document.getElementById('error-list');
+      errList.classList.remove('hidden');
+      errList.innerHTML = '<h3 style="color:#e74c3c;margin-bottom:8px;font-size:13px;">⚠️ Errors</h3>';
+      data.errors.forEach(err => {
+        const div = document.createElement('div');
+        div.className = 'error-item';
+        div.textContent = err;
+        errList.appendChild(div);
+      });
+    }
+
+    if (!data.running) {
+      clearInterval(pollInterval);
+      showDone(data);
+      refreshLibrary(); // update downloaded badges in background
+    }
+  } catch (e) {
+    // ignore poll errors, keep trying
+  }
+}
+
+function showDone(data) {
+  document.getElementById('progress-section').classList.add('hidden');
+  document.getElementById('done-section').classList.remove('hidden');
+  document.getElementById('done-downloaded').textContent = data.completed;
+  document.getElementById('done-skipped').textContent = data.skipped;
+  document.getElementById('done-failed').textContent = data.failed;
+
+  if (data.errors && data.errors.length > 0) {
+    const errList = document.getElementById('done-errors');
+    errList.classList.remove('hidden');
+    errList.innerHTML = '<h3 style="color:#e74c3c;margin-bottom:8px;font-size:13px;">⚠️ Failed downloads (will retry next time):</h3>';
+    data.errors.slice(0, 10).forEach(err => {
+      const div = document.createElement('div');
+      div.className = 'error-item';
+      div.textContent = err;
+      errList.appendChild(div);
+    });
+  }
+}
+
+function startOver() {
+  document.getElementById('done-section').classList.add('hidden');
+  document.getElementById('login-section').classList.remove('hidden');
+  authCode = null;
+  tracks = [];
+  selected = new Set();
+  scanData = null;
+}
+
+async function cleanupOrphans() {
+  if (!confirm('Remove orphaned files (songs you no longer like)?')) return;
+
+  try {
+    const resp = await fetch('/api/cleanup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: orphanedTracks.map(t => t.track_id) }),
+    });
+    const data = await resp.json();
+    alert(`✅ Removed ${data.removed} orphaned file(s)`);
+    orphanedTracks = [];
+    updateOrphanNote();
+    refreshLibrary();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

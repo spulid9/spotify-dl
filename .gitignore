@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Environment
+.env
+venv/
+.venv/
+
+# Test
+.pytest_cache/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloads / temp
+__temp_*
+__cover_*
